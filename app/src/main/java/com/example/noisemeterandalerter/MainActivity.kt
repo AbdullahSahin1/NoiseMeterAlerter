@@ -31,6 +31,13 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.coroutineContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +59,10 @@ sealed class Screen(val route: String, val title: String) {
 @Composable
 fun MainScreen() {
     val navController = rememberNavController()
+    var history by remember { mutableStateOf(listOf<Int>()) }
+    var threshold by remember { mutableStateOf(70f) } // dB
+    var alertType by remember { mutableStateOf("Görsel Uyarı") }
+    val alertTypes = listOf("Görsel Uyarı", "Titreşim", "Bildirim")
     Scaffold(
         bottomBar = { BottomNavBar(navController) }
     ) { innerPadding ->
@@ -60,9 +71,27 @@ fun MainScreen() {
             startDestination = Screen.NoiseMeter.route,
             modifier = Modifier.padding(innerPadding).fillMaxSize()
         ) {
-            composable(Screen.NoiseMeter.route) { NoiseMeterScreen() }
-            composable(Screen.History.route) { HistoryScreen() }
-            composable(Screen.Settings.route) { SettingsScreen() }
+            composable(Screen.NoiseMeter.route) {
+                NoiseMeterScreen(
+                    onNewDecibel = { db ->
+                        if (db > 0) history = (history + db.toInt()).takeLast(100)
+                    },
+                    threshold = threshold,
+                    alertType = alertType
+                )
+            }
+            composable(Screen.History.route) {
+                HistoryScreen(history = history, onClear = { history = emptyList() })
+            }
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    threshold = threshold,
+                    onThresholdChange = { threshold = it },
+                    alertType = alertType,
+                    onAlertTypeChange = { alertType = it },
+                    alertTypes = alertTypes
+                )
+            }
         }
     }
 }
@@ -93,7 +122,11 @@ fun BottomNavBar(navController: NavHostController) {
 }
 
 @Composable
-fun NoiseMeterScreen() {
+fun NoiseMeterScreen(
+    onNewDecibel: (Float) -> Unit,
+    threshold: Float,
+    alertType: String
+) {
     val context = LocalContext.current
     var hasMicPermission by remember {
         mutableStateOf(
@@ -103,6 +136,7 @@ fun NoiseMeterScreen() {
         )
     }
     var isMeasuring by remember { mutableStateOf(false) }
+    var decibel by remember { mutableStateOf(0f) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -112,10 +146,55 @@ fun NoiseMeterScreen() {
         }
     )
 
+    // Ölçüm başladığında AudioRecord ile dB ölçümü başlat
+    LaunchedEffect(isMeasuring, hasMicPermission) {
+        if (isMeasuring && hasMicPermission) {
+            val sampleRate = 44100
+            val bufferSize = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            val audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize
+            )
+            val buffer = ShortArray(bufferSize)
+            audioRecord.startRecording()
+            try {
+                while (isMeasuring && hasMicPermission && coroutineContext.isActive) {
+                    val read = audioRecord.read(buffer, 0, buffer.size)
+                    if (read > 0) {
+                        // RMS hesapla
+                        var sum = 0.0
+                        for (i in 0 until read) {
+                            sum += buffer[i] * buffer[i]
+                        }
+                        val rms = Math.sqrt(sum / read)
+                        // dB hesapla
+                        val db = if (rms > 0) 20 * Math.log10(rms / 32768.0) + 90 else 0.0
+                        decibel = db.toFloat().coerceAtLeast(0f)
+                        onNewDecibel(decibel)
+                    }
+                    // 1 saniye bekle
+                    withContext(Dispatchers.IO) { kotlinx.coroutines.delay(1000) }
+                }
+            } finally {
+                audioRecord.stop()
+                audioRecord.release()
+            }
+        } else {
+            decibel = 0f
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (isMeasuring && hasMicPermission) {
-                Text(text = "Mikrofon aktif")
+                Text(text = "${decibel.toInt()} dB", style = MaterialTheme.typography.displayLarge)
                 Spacer(modifier = Modifier.size(16.dp))
                 Button(onClick = { isMeasuring = false }) {
                     Text("Durdur")
@@ -138,10 +217,7 @@ fun NoiseMeterScreen() {
 }
 
 @Composable
-fun HistoryScreen() {
-    var history by remember {
-        mutableStateOf(listOf(60, 65, 70, 80, 75, 72, 68, 66, 70, 74, 78, 72, 69))
-    }
+fun HistoryScreen(history: List<Int>, onClear: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text = "Ses Seviyesi Geçmişi", style = MaterialTheme.typography.titleMedium)
@@ -165,7 +241,7 @@ fun HistoryScreen() {
                 }
             }
             Spacer(modifier = Modifier.size(16.dp))
-            Button(onClick = { history = emptyList() }) {
+            Button(onClick = onClear) {
                 Text("Geçmişi Temizle")
             }
         }
@@ -173,17 +249,19 @@ fun HistoryScreen() {
 }
 
 @Composable
-fun SettingsScreen() {
-    var threshold by remember { mutableStateOf(70f) } // dB
-    var selectedAlert by remember { mutableStateOf("Görsel Uyarı") }
-    val alertTypes = listOf("Görsel Uyarı", "Titreşim", "Bildirim")
-
+fun SettingsScreen(
+    threshold: Float,
+    onThresholdChange: (Float) -> Unit,
+    alertType: String,
+    onAlertTypeChange: (String) -> Unit,
+    alertTypes: List<String>
+) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text = "Gürültü Eşiği: ${threshold.toInt()} dB", style = MaterialTheme.typography.titleMedium)
             Slider(
                 value = threshold,
-                onValueChange = { threshold = it },
+                onValueChange = onThresholdChange,
                 valueRange = 50f..100f,
                 steps = 5,
                 modifier = Modifier.padding(horizontal = 32.dp)
@@ -193,8 +271,8 @@ fun SettingsScreen() {
             alertTypes.forEach { type ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(
-                        selected = selectedAlert == type,
-                        onClick = { selectedAlert = type }
+                        selected = alertType == type,
+                        onClick = { onAlertTypeChange(type) }
                     )
                     Text(text = type)
                 }
