@@ -46,6 +46,7 @@ import android.app.NotificationManager
 import android.content.Context
 import androidx.core.app.NotificationCompat
 import android.widget.Toast
+import androidx.compose.ui.graphics.nativeCanvas
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -288,11 +289,45 @@ fun NoiseMeterScreen(
 @Composable
 fun HistoryScreen(history: List<Int>, onClear: () -> Unit) {
     val context = LocalContext.current
+    // Haftalık dummy veri (her gün için ortalama dB)
+    val weeklyData = listOf(62, 68, 70, 65, 72, 75, 69)
+    val days = listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = "Son 1 Haftalık Gürültü Seviyesi", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.size(8.dp))
+            // Haftalık grafik
+            Canvas(modifier = Modifier
+                .size(width = 300.dp, height = 120.dp)
+                .padding(8.dp)) {
+                if (weeklyData.isNotEmpty()) {
+                    val maxVal = (weeklyData.maxOrNull() ?: 100).toFloat()
+                    val minVal = (weeklyData.minOrNull() ?: 0).toFloat()
+                    val stepX = size.width / (weeklyData.size - 1).coerceAtLeast(1)
+                    val scaleY = if (maxVal - minVal == 0f) 1f else size.height / (maxVal - minVal)
+                    val path = Path()
+                    weeklyData.forEachIndexed { i, value ->
+                        val x = i * stepX
+                        val y = size.height - (value - minVal) * scaleY
+                        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    drawPath(path, color = Color(0xFF388E3C), style = Stroke(width = 4f))
+                    // Gün isimlerini alta yaz
+                    days.forEachIndexed { i, day ->
+                        drawContext.canvas.nativeCanvas.apply {
+                            drawText(day, i * stepX, size.height + 24f, android.graphics.Paint().apply {
+                                color = android.graphics.Color.DKGRAY
+                                textSize = 28f
+                                textAlign = android.graphics.Paint.Align.CENTER
+                            })
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.size(16.dp))
             Text(text = "Ses Seviyesi Geçmişi", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.size(16.dp))
-            // Grafik Alanı
+            // Eski grafik (anlık geçmiş)
             Canvas(modifier = Modifier
                 .size(width = 300.dp, height = 150.dp)
                 .padding(8.dp)) {
