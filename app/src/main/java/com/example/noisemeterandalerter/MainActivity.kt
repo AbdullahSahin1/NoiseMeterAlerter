@@ -9,9 +9,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,10 @@ import androidx.navigation.compose.rememberNavController
 import com.example.noisemeterandalerter.ui.theme.NoiseMeterAndAlerterTheme
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -133,8 +139,36 @@ fun NoiseMeterScreen() {
 
 @Composable
 fun HistoryScreen() {
+    var history by remember {
+        mutableStateOf(listOf(60, 65, 70, 80, 75, 72, 68, 66, 70, 74, 78, 72, 69))
+    }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = "Geçmiş/Grafik Ekranı")
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = "Ses Seviyesi Geçmişi", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.size(16.dp))
+            // Grafik Alanı
+            Canvas(modifier = Modifier
+                .size(width = 300.dp, height = 150.dp)
+                .padding(8.dp)) {
+                if (history.isNotEmpty()) {
+                    val maxVal = (history.maxOrNull() ?: 100).toFloat()
+                    val minVal = (history.minOrNull() ?: 0).toFloat()
+                    val stepX = size.width / (history.size - 1).coerceAtLeast(1)
+                    val scaleY = if (maxVal - minVal == 0f) 1f else size.height / (maxVal - minVal)
+                    val path = Path()
+                    history.forEachIndexed { i, value ->
+                        val x = i * stepX
+                        val y = size.height - (value - minVal) * scaleY
+                        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    drawPath(path, color = Color(0xFF1976D2), style = Stroke(width = 4f))
+                }
+            }
+            Spacer(modifier = Modifier.size(16.dp))
+            Button(onClick = { history = emptyList() }) {
+                Text("Geçmişi Temizle")
+            }
+        }
     }
 }
 
