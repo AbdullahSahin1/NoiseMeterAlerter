@@ -38,6 +38,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineContext
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.Build
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import androidx.core.app.NotificationCompat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -137,6 +144,8 @@ fun NoiseMeterScreen(
     }
     var isMeasuring by remember { mutableStateOf(false) }
     var decibel by remember { mutableStateOf(0f) }
+    var showVisualAlert by remember { mutableStateOf(false) }
+    var lastAlertTime by remember { mutableStateOf(0L) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -145,6 +154,32 @@ fun NoiseMeterScreen(
             if (granted) isMeasuring = true
         }
     )
+
+    // Uyarı fonksiyonları
+    fun triggerVibration() {
+        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(500)
+        }
+    }
+    fun triggerNotification() {
+        val channelId = "noise_alert_channel"
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, "Gürültü Uyarıları", NotificationManager.IMPORTANCE_HIGH)
+            notificationManager.createNotificationChannel(channel)
+        }
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setContentTitle("Gürültü Uyarısı")
+            .setContentText("Gürültü seviyesi eşiği aştı! (${decibel.toInt()} dB)")
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        notificationManager.notify(1, notification)
+    }
 
     // Ölçüm başladığında AudioRecord ile dB ölçümü başlat
     LaunchedEffect(isMeasuring, hasMicPermission) {
@@ -168,32 +203,61 @@ fun NoiseMeterScreen(
                 while (isMeasuring && hasMicPermission && coroutineContext.isActive) {
                     val read = audioRecord.read(buffer, 0, buffer.size)
                     if (read > 0) {
-                        // RMS hesapla
                         var sum = 0.0
                         for (i in 0 until read) {
                             sum += buffer[i] * buffer[i]
                         }
                         val rms = Math.sqrt(sum / read)
-                        // dB hesapla
                         val db = if (rms > 0) 20 * Math.log10(rms / 32768.0) + 90 else 0.0
                         decibel = db.toFloat().coerceAtLeast(0f)
                         onNewDecibel(decibel)
+                        // Eşik aşımı kontrolü (her 2 saniyede bir uyarı)
+                        if (decibel > threshold && System.currentTimeMillis() - lastAlertTime > 2000) {
+                            when (alertType) {
+                                "Görsel Uyarı" -> showVisualAlert = true
+                                "Titreşim" -> triggerVibration()
+                                "Bildirim" -> triggerNotification()
+                            }
+                            lastAlertTime = System.currentTimeMillis()
+                        } else if (decibel <= threshold) {
+                            showVisualAlert = false
+                        }
                     }
-                    // 1 saniye bekle
                     withContext(Dispatchers.IO) { kotlinx.coroutines.delay(1000) }
                 }
             } finally {
                 audioRecord.stop()
                 audioRecord.release()
+                showVisualAlert = false
             }
         } else {
             decibel = 0f
+            showVisualAlert = false
         }
     }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (isMeasuring && hasMicPermission) {
+                if (showVisualAlert && alertType == "Görsel Uyarı") {
+                    Box(
+                        modifier = Modifier
+                            .size(120.dp)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            color = Color.Red,
+                            shape = MaterialTheme.shapes.medium,
+                            shadowElevation = 8.dp
+                        ) {
+                            Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+                                Text("UYARI!", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.size(8.dp))
+                }
                 Text(text = "${decibel.toInt()} dB", style = MaterialTheme.typography.displayLarge)
                 Spacer(modifier = Modifier.size(16.dp))
                 Button(onClick = { isMeasuring = false }) {
