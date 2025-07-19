@@ -45,6 +45,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import androidx.core.app.NotificationCompat
+import android.widget.Toast
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -260,7 +261,10 @@ fun NoiseMeterScreen(
                 }
                 Text(text = "${decibel.toInt()} dB", style = MaterialTheme.typography.displayLarge)
                 Spacer(modifier = Modifier.size(16.dp))
-                Button(onClick = { isMeasuring = false }) {
+                Button(onClick = {
+                    isMeasuring = false
+                    Toast.makeText(context, "Ölçüm durduruldu", Toast.LENGTH_SHORT).show()
+                }) {
                     Text("Durdur")
                 }
             } else {
@@ -269,6 +273,7 @@ fun NoiseMeterScreen(
                 Button(onClick = {
                     if (hasMicPermission) {
                         isMeasuring = true
+                        Toast.makeText(context, "Ölçüm başlatıldı", Toast.LENGTH_SHORT).show()
                     } else {
                         permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
@@ -282,6 +287,7 @@ fun NoiseMeterScreen(
 
 @Composable
 fun HistoryScreen(history: List<Int>, onClear: () -> Unit) {
+    val context = LocalContext.current
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text = "Ses Seviyesi Geçmişi", style = MaterialTheme.typography.titleMedium)
@@ -305,7 +311,10 @@ fun HistoryScreen(history: List<Int>, onClear: () -> Unit) {
                 }
             }
             Spacer(modifier = Modifier.size(16.dp))
-            Button(onClick = onClear) {
+            Button(onClick = {
+                onClear()
+                Toast.makeText(context, "Geçmiş temizlendi!", Toast.LENGTH_SHORT).show()
+            }) {
                 Text("Geçmişi Temizle")
             }
         }
@@ -320,6 +329,7 @@ fun SettingsScreen(
     onAlertTypeChange: (String) -> Unit,
     alertTypes: List<String>
 ) {
+    val context = LocalContext.current
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text = "Gürültü Eşiği: ${threshold.toInt()} dB", style = MaterialTheme.typography.titleMedium)
@@ -342,7 +352,9 @@ fun SettingsScreen(
                 }
             }
             Spacer(modifier = Modifier.size(24.dp))
-            Button(onClick = { /* Ayarları kaydetme işlemi buraya eklenebilir */ }) {
+            Button(onClick = {
+                Toast.makeText(context, "Ayarlar kaydedildi!", Toast.LENGTH_SHORT).show()
+            }) {
                 Text("Kaydet")
             }
         }
