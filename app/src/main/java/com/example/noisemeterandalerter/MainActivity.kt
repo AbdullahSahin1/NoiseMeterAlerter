@@ -1,22 +1,30 @@
 package com.example.noisemeterandalerter
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.noisemeterandalerter.ui.theme.NoiseMeterAndAlerterTheme
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,8 +88,46 @@ fun BottomNavBar(navController: NavHostController) {
 
 @Composable
 fun NoiseMeterScreen() {
+    val context = LocalContext.current
+    var hasMicPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var isMeasuring by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted ->
+            hasMicPermission = granted
+            if (granted) isMeasuring = true
+        }
+    )
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = "Gürültü Ölçer Ekranı")
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (isMeasuring && hasMicPermission) {
+                Text(text = "Mikrofon aktif")
+                Spacer(modifier = Modifier.size(16.dp))
+                Button(onClick = { isMeasuring = false }) {
+                    Text("Durdur")
+                }
+            } else {
+                Text(text = "Gürültü Ölçer Ekranı")
+                Spacer(modifier = Modifier.size(16.dp))
+                Button(onClick = {
+                    if (hasMicPermission) {
+                        isMeasuring = true
+                    } else {
+                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }) {
+                    Text("Başlat")
+                }
+            }
+        }
     }
 }
 
@@ -94,8 +140,36 @@ fun HistoryScreen() {
 
 @Composable
 fun SettingsScreen() {
+    var threshold by remember { mutableStateOf(70f) } // dB
+    var selectedAlert by remember { mutableStateOf("Görsel Uyarı") }
+    val alertTypes = listOf("Görsel Uyarı", "Titreşim", "Bildirim")
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = "Ayarlar Ekranı")
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = "Gürültü Eşiği: ${threshold.toInt()} dB", style = MaterialTheme.typography.titleMedium)
+            Slider(
+                value = threshold,
+                onValueChange = { threshold = it },
+                valueRange = 50f..100f,
+                steps = 5,
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
+            Spacer(modifier = Modifier.size(24.dp))
+            Text(text = "Uyarı Tipi", style = MaterialTheme.typography.titleMedium)
+            alertTypes.forEach { type ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = selectedAlert == type,
+                        onClick = { selectedAlert = type }
+                    )
+                    Text(text = type)
+                }
+            }
+            Spacer(modifier = Modifier.size(24.dp))
+            Button(onClick = { /* Ayarları kaydetme işlemi buraya eklenebilir */ }) {
+                Text("Kaydet")
+            }
+        }
     }
 }
 
