@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,7 +44,7 @@ fun MainScreen() {
         NavHost(
             navController = navController,
             startDestination = Screen.NoiseMeter.route,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.padding(innerPadding).fillMaxSize()
         ) {
             composable(Screen.NoiseMeter.route) { NoiseMeterScreen() }
             composable(Screen.History.route) { HistoryScreen() }
@@ -52,4 +53,49 @@ fun MainScreen() {
     }
 }
 
+@Composable
+fun BottomNavBar(navController: NavHostController) {
+    val items = listOf(Screen.NoiseMeter, Screen.History, Screen.Settings)
+    NavigationBar {
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = navBackStackEntry?.destination?.route
+        items.forEach { screen ->
+            NavigationBarItem(
+                selected = currentRoute == screen.route,
+                onClick = {
+                    if (currentRoute != screen.route) {
+                        navController.navigate(screen.route) {
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                },
+                label = { Text(screen.title) },
+                icon = { /* İkon eklenebilir */ }
+            )
+        }
+    }
+}
+
+@Composable
+fun NoiseMeterScreen() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(text = "Gürültü Ölçer Ekranı")
+    }
+}
+
+@Composable
+fun HistoryScreen() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(text = "Geçmiş/Grafik Ekranı")
+    }
+}
+
+@Composable
+fun SettingsScreen() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(text = "Ayarlar Ekranı")
+    }
+}
 
