@@ -37,7 +37,7 @@ import android.media.MediaRecorder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.coroutineContext
+import kotlin.coroutines.coroutineContext
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.Build
